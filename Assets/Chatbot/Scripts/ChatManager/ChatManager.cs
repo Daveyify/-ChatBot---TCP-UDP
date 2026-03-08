@@ -3,65 +3,44 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 
-/// <summary>
-/// Orquesta el flujo completo del ChatBot:
-///
-/// [UDP]
-///   1. Servidor inicia + Cliente conecta
-///   2. Bot envía Mensaje automático 1
-///   3. Usuario responde (texto o imagen fragmentada)
-///   4. Bot envía Mensaje automático 2
-///   5. Transición a TCP
-///
-/// [TCP]
-///   6. TCPServer y TCPClient se conectan
-///   7. UDP se desconecta
-///   8. Chat libre entre usuario y agente
-/// </summary>
 public class ChatManager : MonoBehaviour
 {
-    [Header("Red UDP")]
+    [Header("UDP")]
     [SerializeField] private UDPServer udpServer;
     [SerializeField] private UDPClient udpClient;
 
-    [Header("Red TCP Client")]
+    [Header("TCP Client")]
     [SerializeField] private TCPClient tcpClient;
 
-    [Header("UDP Settings")]
+    [Header("Settings UDP")]
     [SerializeField] private string serverAddress = "127.0.0.1";
     [SerializeField] private int udpPort = 5555;
     [SerializeField] private int delayBetweenMessagesMs = 1000;
     [SerializeField] private int delayBetweenChunksMs = 10;
 
-    [Header("TCP Setting")]
+    [Header("Settings TCP")]
     [SerializeField] private int tcpPort = 5556;
 
-    [Header("Bot automatic messages")]
+    [Header("Bot automatic message")]
     [SerializeField] private string botMessage1 = "¡Hola! Bienvenido al chat. ¿En qué puedo ayudarte?";
     [SerializeField] private string botMessage2 = "Gracias por tu respuesta. Ahora te voy a conectar con un agente.";
 
     [Header("UI Client")]
     [SerializeField] private ChatUIManager chatUI;
 
-    // Registrados automáticamente desde la escena del servidor
     private ServerUIManager _serverUI;
     private TCPServer _tcpServer;
 
-    // Estado del flujo
     private bool _handshakeCompleted = false;
     private bool _waitingForUserReply = false;
     private bool _isTCPActive = false;
 
-    // Evita que el eco TCP muestre mensajes dobles.
-    // Cuando el servidor envía un mensaje al cliente, el TCPClient lo recibe
-    // de vuelta — esta bandera lo ignora porque ya se mostró en la UI.
-    private bool _ignorNextTCPClientMessage = false;
+    // Flags para evitar eco TCP
+    private bool _ignoreNextTCPClientMessage = false;
     private bool _ignoreNextTCPClientFile = false;
 
-    // Ensamblador de imágenes UDP
     private ImageAssembler _imageAssembler;
 
-    // Main Thread Dispatcher
     private readonly Queue<Action> _mainThreadQueue = new Queue<Action>();
     private readonly object _queueLock = new object();
 
@@ -71,6 +50,7 @@ public class ChatManager : MonoBehaviour
     {
         _imageAssembler = new ImageAssembler();
         _imageAssembler.OnImageAssembled += OnUDPImageAssembled;
+        _imageAssembler.OnPDFAssembled += OnUDPPDFAssembled;
 
         udpClient.OnConnected += HandleUDPHandshake;
         udpClient.OnMessageReceived += HandleUDPClientReceived;
@@ -80,6 +60,7 @@ public class ChatManager : MonoBehaviour
 
         chatUI.OnUserSendText += HandleUserSendText;
         chatUI.OnUserSendImage += HandleUserSendImage;
+        chatUI.OnUserSendPDF += HandleUserSendPDF;
     }
 
     void Update()
@@ -96,7 +77,7 @@ public class ChatManager : MonoBehaviour
         lock (_queueLock) { _mainThreadQueue.Enqueue(action); }
     }
 
-    // ── Registro desde escena del servidor ───────────────────────────
+    // ── Registro ─────────────────────────────────────────────────────
 
     public void RegisterServerUI(ServerUIManager serverUI, TCPServer tcpServer)
     {
@@ -105,15 +86,16 @@ public class ChatManager : MonoBehaviour
 
         _serverUI.OnServerSendText += HandleServerSendText;
         _serverUI.OnServerSendImage += HandleServerSendImage;
+        _serverUI.OnServerSendPDF += HandleServerSendPDF;
 
         _tcpServer.OnMessageReceived += HandleTCPServerReceived;
         _tcpServer.OnFileReceived += HandleTCPServerFileReceived;
         _tcpServer.OnConnected += HandleTCPConnected;
 
-        Debug.Log("[ChatManager] ServerUIManager and TCPServer registered.");
+        Debug.Log("[ChatManager] ServerUIManager y TCPServer registered.");
     }
 
-    // ── Punto de entrada UDP ─────────────────────────────────────────
+    // ── Inicio UDP ───────────────────────────────────────────────────
 
     public async void StartChatBot()
     {
@@ -170,7 +152,6 @@ public class ChatManager : MonoBehaviour
 
     private async void HandleUserSendText(string message)
     {
-        // Mostrar en servidor como mensaje del cliente
         RunOnMainThread(() => _serverUI?.AddClientTextBubble(message));
 
         if (_isTCPActive)
@@ -178,8 +159,7 @@ public class ChatManager : MonoBehaviour
         else
         {
             await udpClient.SendMessageAsync(message);
-            if (_waitingForUserReply)
-                await ContinueBotFlow();
+            if (_waitingForUserReply) await ContinueBotFlow();
         }
     }
 
@@ -188,35 +168,33 @@ public class ChatManager : MonoBehaviour
         RunOnMainThread(() => _serverUI?.AddClientImageBubble(imageBytes));
 
         if (_isTCPActive)
-        {
             await tcpClient.SendFileDataAsync("image.png", "image", imageBytes);
-        }
         else
-        {
-            string transferId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            List<string> messages = ImageChunker.BuildMessages(imageBytes, transferId);
-            foreach (string msg in messages)
-            {
-                await udpClient.SendMessageAsync(msg);
-                await Task.Delay(delayBetweenChunksMs);
-            }
-            if (_waitingForUserReply)
-                await ContinueBotFlow();
-        }
+            await SendChunked(imageBytes, isImage: true, fileName: null);
+    }
+
+    private async void HandleUserSendPDF(byte[] pdfBytes, string fileName)
+    {
+        RunOnMainThread(() => _serverUI?.AddClientPDFBubble(pdfBytes, fileName));
+
+        if (_isTCPActive)
+            await tcpClient.SendFileDataAsync(fileName, "pdf", pdfBytes);
+        else
+            await SendChunked(pdfBytes, isImage: false, fileName: fileName);
+
+        if (!_isTCPActive && _waitingForUserReply)
+            await ContinueBotFlow();
     }
 
     // ── Handlers UI Servidor ─────────────────────────────────────────
 
     private async void HandleServerSendText(string message)
     {
-        // Mostrar en UI del cliente directamente — NO esperar el eco TCP
         RunOnMainThread(() => chatUI.AddBotTextBubble(message));
 
         if (_isTCPActive)
         {
-            // Ignorar el próximo mensaje que llegue al TCPClient
-            // porque ya lo mostramos arriba
-            _ignorNextTCPClientMessage = true;
+            _ignoreNextTCPClientMessage = true;
             await _tcpServer.SendMessageAsync(message);
         }
         else
@@ -233,15 +211,20 @@ public class ChatManager : MonoBehaviour
             await _tcpServer.SendFileDataAsync("image.png", "image", imageBytes);
         }
         else
+            await SendChunkedFromServer(imageBytes, isImage: true, fileName: null);
+    }
+
+    private async void HandleServerSendPDF(byte[] pdfBytes, string fileName)
+    {
+        RunOnMainThread(() => chatUI.AddBotPDFBubble(pdfBytes, fileName));
+
+        if (_isTCPActive)
         {
-            string transferId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            List<string> messages = ImageChunker.BuildMessages(imageBytes, transferId);
-            foreach (string msg in messages)
-            {
-                await udpServer.SendMessageAsync(msg);
-                await Task.Delay(delayBetweenChunksMs);
-            }
+            _ignoreNextTCPClientFile = true;
+            await _tcpServer.SendFileDataAsync(fileName, "pdf", pdfBytes);
         }
+        else
+            await SendChunkedFromServer(pdfBytes, isImage: false, fileName: fileName);
     }
 
     // ── Handlers red UDP ─────────────────────────────────────────────
@@ -268,31 +251,28 @@ public class ChatManager : MonoBehaviour
         RunOnMainThread(() => chatUI.AddBotImageBubble(imageBytes));
     }
 
+    private void OnUDPPDFAssembled(byte[] pdfBytes, string fileName)
+    {
+        RunOnMainThread(() => chatUI.AddBotPDFBubble(pdfBytes, fileName));
+    }
+
     // ── Handlers red TCP ─────────────────────────────────────────────
 
     private void HandleTCPClientReceived(string message)
     {
-        // Ignorar el eco si el mensaje ya fue mostrado por HandleServerSendText
-        if (_ignorNextTCPClientMessage)
-        {
-            _ignorNextTCPClientMessage = false;
-            return;
-        }
+        if (_ignoreNextTCPClientMessage) { _ignoreNextTCPClientMessage = false; return; }
         RunOnMainThread(() => chatUI.AddBotTextBubble(message));
     }
 
     private void HandleTCPClientFileReceived(FileTransferData file)
     {
-        if (_ignoreNextTCPClientFile)
-        {
-            _ignoreNextTCPClientFile = false;
-            return;
-        }
+        if (_ignoreNextTCPClientFile) { _ignoreNextTCPClientFile = false; return; }
+
+        byte[] bytes = file.GetBytes();
         if (file.fileType == "image")
-        {
-            byte[] imageBytes = file.GetBytes();
-            RunOnMainThread(() => chatUI.AddBotImageBubble(imageBytes));
-        }
+            RunOnMainThread(() => chatUI.AddBotImageBubble(bytes));
+        else if (file.fileType == "pdf")
+            RunOnMainThread(() => chatUI.AddBotPDFBubble(bytes, file.fileName));
     }
 
     private void HandleTCPServerReceived(string message)
@@ -302,21 +282,21 @@ public class ChatManager : MonoBehaviour
 
     private void HandleTCPServerFileReceived(FileTransferData file)
     {
+        byte[] bytes = file.GetBytes();
         if (file.fileType == "image")
-        {
-            byte[] imageBytes = file.GetBytes();
-            RunOnMainThread(() => _serverUI?.AddClientImageBubble(imageBytes));
-        }
+            RunOnMainThread(() => _serverUI?.AddClientImageBubble(bytes));
+        else if (file.fileType == "pdf")
+            RunOnMainThread(() => _serverUI?.AddClientPDFBubble(bytes, file.fileName));
     }
 
-    // ── Flujo del bot UDP ────────────────────────────────────────────
+    // ── Flujo bot UDP ────────────────────────────────────────────────
 
     private async Task SendBotMessage(string message)
     {
         await Task.Delay(delayBetweenMessagesMs);
         await udpServer.SendMessageAsync(message);
         RunOnMainThread(() => _serverUI?.AddServerTextBubble(message));
-        Debug.Log($"[ChatManager] Bot send: {message}");
+        Debug.Log($"[ChatManager] Bot sent: {message}");
     }
 
     private async Task ContinueBotFlow()
@@ -324,6 +304,36 @@ public class ChatManager : MonoBehaviour
         _waitingForUserReply = false;
         await SendBotMessage(botMessage2);
         SwitchToTCP();
+    }
+
+    // ── Helpers de fragmentación ──────────────────────────────────────
+
+    private async Task SendChunked(byte[] bytes, bool isImage, string fileName)
+    {
+        string id = Guid.NewGuid().ToString("N").Substring(0, 8);
+        List<string> messages = isImage
+            ? ImageChunker.BuildMessages(bytes, id)
+            : ImageChunker.BuildPDFMessages(bytes, id, fileName);
+
+        foreach (string msg in messages)
+        {
+            await udpClient.SendMessageAsync(msg);
+            await Task.Delay(delayBetweenChunksMs);
+        }
+    }
+
+    private async Task SendChunkedFromServer(byte[] bytes, bool isImage, string fileName)
+    {
+        string id = Guid.NewGuid().ToString("N").Substring(0, 8);
+        List<string> messages = isImage
+            ? ImageChunker.BuildMessages(bytes, id)
+            : ImageChunker.BuildPDFMessages(bytes, id, fileName);
+
+        foreach (string msg in messages)
+        {
+            await udpServer.SendMessageAsync(msg);
+            await Task.Delay(delayBetweenChunksMs);
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -337,13 +347,16 @@ public class ChatManager : MonoBehaviour
             elapsed += 100;
         }
         if (!_handshakeCompleted)
-            Debug.LogWarning("[ChatManager] Timeout waiting for handshake UDP.");
+            Debug.LogWarning("[ChatManager] Timeout waiting handshake UDP.");
     }
 
     void OnDestroy()
     {
         if (_imageAssembler != null)
+        {
             _imageAssembler.OnImageAssembled -= OnUDPImageAssembled;
+            _imageAssembler.OnPDFAssembled -= OnUDPPDFAssembled;
+        }
 
         if (udpClient != null)
         {
@@ -368,12 +381,14 @@ public class ChatManager : MonoBehaviour
         {
             chatUI.OnUserSendText -= HandleUserSendText;
             chatUI.OnUserSendImage -= HandleUserSendImage;
+            chatUI.OnUserSendPDF -= HandleUserSendPDF;
         }
 
         if (_serverUI != null)
         {
             _serverUI.OnServerSendText -= HandleServerSendText;
             _serverUI.OnServerSendImage -= HandleServerSendImage;
+            _serverUI.OnServerSendPDF -= HandleServerSendPDF;
         }
     }
 }

@@ -3,129 +3,89 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Recolecta los chunks de imagen que llegan por UDP y los reconstruye
-/// cuando están todos presentes.
-/// 
-/// Uso:
-///   1. Llama a ProcessMessage() con cada mensaje que llegue
-///   2. Suscríbete a OnImageAssembled para recibir la imagen completa
+/// Recolecta chunks de imagen y PDF que llegan por UDP y los reconstruye.
 /// </summary>
 public class ImageAssembler
 {
-    // Evento que se dispara cuando una imagen está completa
     public event Action<byte[]> OnImageAssembled;
+    public event Action<byte[], string> OnPDFAssembled; // bytes + fileName
 
-    // Diccionario: transferId → datos de la transferencia en curso
     private readonly Dictionary<string, TransferData> _transfers = new Dictionary<string, TransferData>();
 
     private class TransferData
     {
         public int TotalChunks;
-        public Dictionary<int, string> Chunks = new Dictionary<int, string>(); // index → base64
+        public string FileName;
+        public bool IsPDF;
+        public Dictionary<int, string> Chunks = new Dictionary<int, string>();
     }
 
-    /// <summary>
-    /// Procesa un mensaje UDP. Si no es de imagen lo ignora.
-    /// Devuelve true si el mensaje fue procesado como parte de una imagen.
-    /// </summary>
+    /// <summary>Procesa un mensaje UDP. Devuelve true si era un chunk.</summary>
     public bool ProcessMessage(string message)
     {
-        if (message.StartsWith(ImageChunker.PREFIX_START))
-        {
-            HandleStart(message);
-            return true;
-        }
-
-        if (message.StartsWith(ImageChunker.PREFIX_CHUNK))
-        {
-            HandleChunk(message);
-            return true;
-        }
-
-        if (message.StartsWith(ImageChunker.PREFIX_END))
-        {
-            HandleEnd(message);
-            return true;
-        }
-
+        if (message.StartsWith(ImageChunker.PREFIX_START)) { HandleStart(message, false); return true; }
+        if (message.StartsWith(ImageChunker.PREFIX_CHUNK)) { HandleChunk(message, ImageChunker.PREFIX_CHUNK); return true; }
+        if (message.StartsWith(ImageChunker.PREFIX_END)) { HandleEnd(message, ImageChunker.PREFIX_END, false); return true; }
+        if (message.StartsWith(ImageChunker.PREFIX_PDF_START)) { HandleStart(message, true); return true; }
+        if (message.StartsWith(ImageChunker.PREFIX_PDF_CHUNK)) { HandleChunk(message, ImageChunker.PREFIX_PDF_CHUNK); return true; }
+        if (message.StartsWith(ImageChunker.PREFIX_PDF_END)) { HandleEnd(message, ImageChunker.PREFIX_PDF_END, true); return true; }
         return false;
     }
 
-    // ── Handlers internos ────────────────────────────────────────────
-
-    private void HandleStart(string message)
+    private void HandleStart(string message, bool isPDF)
     {
-        // Formato: IMG_START:{id}:{totalChunks}
-        string payload = message.Substring(ImageChunker.PREFIX_START.Length);
+        string prefix = isPDF ? ImageChunker.PREFIX_PDF_START : ImageChunker.PREFIX_START;
+        string payload = message.Substring(prefix.Length);
         string[] parts = payload.Split(':');
-
         if (parts.Length < 2) return;
 
-        string id          = parts[0];
-        int    totalChunks = int.Parse(parts[1]);
+        string id = parts[0];
+        int totalChunks = int.Parse(parts[1]);
+        string fileName = isPDF && parts.Length >= 3 ? parts[2] : "document.pdf";
 
-        _transfers[id] = new TransferData { TotalChunks = totalChunks };
-        Debug.Log($"[ImageAssembler] Started transference '{id}' — {totalChunks} chunks expected.");
+        _transfers[id] = new TransferData { TotalChunks = totalChunks, FileName = fileName, IsPDF = isPDF };
+        Debug.Log($"[Assembler] Started {(isPDF ? "PDF" : "IMG")} '{id}' — {totalChunks} chunks.");
     }
 
-    private void HandleChunk(string message)
+    private void HandleChunk(string message, string prefix)
     {
-        // Formato: IMG_CHUNK:{id}:{index}:{base64data}
-        string payload = message.Substring(ImageChunker.PREFIX_CHUNK.Length);
-
-        // Solo dividir en 3 partes (el base64 puede contener ':' en teoría aunque es raro)
-        int firstColon  = payload.IndexOf(':');
+        string payload = message.Substring(prefix.Length);
+        int firstColon = payload.IndexOf(':');
         int secondColon = payload.IndexOf(':', firstColon + 1);
-
         if (firstColon < 0 || secondColon < 0) return;
 
-        string id         = payload.Substring(0, firstColon);
-        int    chunkIndex = int.Parse(payload.Substring(firstColon + 1, secondColon - firstColon - 1));
-        string base64     = payload.Substring(secondColon + 1);
+        string id = payload.Substring(0, firstColon);
+        int chunkIndex = int.Parse(payload.Substring(firstColon + 1, secondColon - firstColon - 1));
+        string base64 = payload.Substring(secondColon + 1);
 
-        if (!_transfers.ContainsKey(id))
-        {
-            Debug.LogWarning($"[ImageAssembler] Chunk received for unknown transfer '{id}'.");
-            return;
-        }
-
+        if (!_transfers.ContainsKey(id)) return;
         _transfers[id].Chunks[chunkIndex] = base64;
-        Debug.Log($"[ImageAssembler] Chunk {chunkIndex + 1}/{_transfers[id].TotalChunks} received.");
     }
 
-    private void HandleEnd(string message)
+    private void HandleEnd(string message, string prefix, bool isPDF)
     {
-        // Formato: IMG_END:{id}
-        string id = message.Substring(ImageChunker.PREFIX_END.Length);
-
-        if (!_transfers.ContainsKey(id))
-        {
-            Debug.LogWarning($"[ImageAssembler] IMG_END for unknow transfer '{id}'.");
-            return;
-        }
+        string id = message.Substring(prefix.Length);
+        if (!_transfers.ContainsKey(id)) return;
 
         TransferData transfer = _transfers[id];
-
-        // Verificar que llegaron todos los chunks
         if (transfer.Chunks.Count != transfer.TotalChunks)
         {
-            Debug.LogWarning($"[ImageAssembler] Transfer '{id}' incomplete: " +
-                             $"{transfer.Chunks.Count}/{transfer.TotalChunks} chunks.");
+            Debug.LogWarning($"[Assembler] Tranfer '{id}' incomplete.");
             _transfers.Remove(id);
             return;
         }
 
-        // Reconstruir la imagen juntando los chunks en orden
-        var allBytes = new System.Collections.Generic.List<byte>();
+        var allBytes = new List<byte>();
         for (int i = 0; i < transfer.TotalChunks; i++)
-        {
-            byte[] chunkBytes = Convert.FromBase64String(transfer.Chunks[i]);
-            allBytes.AddRange(chunkBytes);
-        }
+            allBytes.AddRange(Convert.FromBase64String(transfer.Chunks[i]));
 
+        string fileName = transfer.FileName;
         _transfers.Remove(id);
-        Debug.Log($"[ImageAssembler] Imagen '{id}' rebuilt — {allBytes.Count} bytes.");
+        Debug.Log($"[Assembler] '{id}' rebuilt — {allBytes.Count} bytes.");
 
-        OnImageAssembled?.Invoke(allBytes.ToArray());
+        if (isPDF)
+            OnPDFAssembled?.Invoke(allBytes.ToArray(), fileName);
+        else
+            OnImageAssembled?.Invoke(allBytes.ToArray());
     }
 }

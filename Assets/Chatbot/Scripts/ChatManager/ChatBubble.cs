@@ -1,16 +1,19 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
+using System.IO;
 
 /// <summary>
 /// Representa una burbuja individual en el chat.
-/// Tres tipos: Bot (izquierda), User (derecha), System (centrado).
+/// Tipos: Bot (izquierda), User (derecha), System (centrado).
+/// Soporta texto, imagen y PDF (abre al hacer clic).
 /// </summary>
-public class ChatBubble : MonoBehaviour
+public class ChatBubble : MonoBehaviour, IPointerClickHandler
 {
     public enum BubbleSide { Bot, User, System }
 
-    [Header("Prefab references")]
+    [Header("Prefab")]
     [SerializeField] private TMP_Text messageText;
     [SerializeField] private RawImage messageImage;
     [SerializeField] private GameObject textContainer;
@@ -22,9 +25,14 @@ public class ChatBubble : MonoBehaviour
     [SerializeField] private Color userColor = new Color(0.18f, 0.47f, 0.91f);
     [SerializeField] private Color systemColor = new Color(0.15f, 0.15f, 0.15f, 0.6f);
 
-    [Header("Image size")]
+    [Header("Size image")]
     [SerializeField] private float imageWidth = 220f;
     [SerializeField] private float imagePadding = 20f;
+
+    // Ruta del PDF guardado — se usa al hacer clic para abrirlo
+    private string _pdfPath = null;
+
+    // ── Métodos públicos ─────────────────────────────────────────────
 
     /// <summary>Configura la burbuja con un mensaje de texto.</summary>
     public void SetText(string message, BubbleSide side)
@@ -32,22 +40,22 @@ public class ChatBubble : MonoBehaviour
         textContainer.SetActive(true);
         imageContainer.SetActive(false);
         messageText.text = message;
+        messageText.alignment = TextAlignmentOptions.Left;
         AlignBubble(side);
     }
 
+    /// <summary>Configura la burbuja como mensaje de sistema centrado.</summary>
     public void SetSystemMessage(string message)
     {
         textContainer.SetActive(true);
         imageContainer.SetActive(false);
-
-        messageText.text = $" {message} ";
+        messageText.text = $"{message}";
         messageText.alignment = TextAlignmentOptions.Center;
         messageText.fontSize = 14;
-
         AlignBubble(BubbleSide.System);
     }
 
-    /// <summary>Configura la burbuja con una imagen recibida como bytes.</summary>
+    /// <summary>Configura la burbuja con una imagen.</summary>
     public void SetImage(byte[] imageBytes, BubbleSide side)
     {
         textContainer.SetActive(false);
@@ -64,19 +72,49 @@ public class ChatBubble : MonoBehaviour
         RectTransform imgRect = messageImage.GetComponent<RectTransform>();
         imgRect.sizeDelta = new Vector2(finalWidth, finalHeight);
 
-        LayoutElement layoutElement = messageImage.GetComponent<LayoutElement>();
-        if (layoutElement == null)
-            layoutElement = messageImage.gameObject.AddComponent<LayoutElement>();
-
-        layoutElement.preferredWidth = finalWidth;
-        layoutElement.preferredHeight = finalHeight;
-        layoutElement.minWidth = finalWidth;
-        layoutElement.minHeight = finalHeight;
+        LayoutElement layout = messageImage.GetComponent<LayoutElement>()
+                            ?? messageImage.gameObject.AddComponent<LayoutElement>();
+        layout.preferredWidth = finalWidth;
+        layout.preferredHeight = finalHeight;
+        layout.minWidth = finalWidth;
+        layout.minHeight = finalHeight;
 
         AlignBubble(side);
     }
 
-    /// <summary>Alinea la burbuja según el tipo.</summary>
+    /// <summary>
+    /// Configura la burbuja como PDF.
+    /// Guarda el archivo en persistentDataPath y lo abre al hacer clic.
+    /// </summary>
+    public void SetPDF(byte[] pdfBytes, string fileName, BubbleSide side)
+    {
+        textContainer.SetActive(true);
+        imageContainer.SetActive(false);
+
+        // Guardar PDF en disco para poder abrirlo
+        _pdfPath = Path.Combine(Application.persistentDataPath, fileName);
+        File.WriteAllBytes(_pdfPath, pdfBytes);
+
+        // Mostrar texto clickeable con ícono
+        messageText.text = $"📄 {fileName}\n<size=12><color=#aaaaaa>Toca para abrir</color></size>";
+        messageText.alignment = TextAlignmentOptions.Left;
+
+        AlignBubble(side);
+        Debug.Log($"[ChatBubble] PDF saved in: {_pdfPath}");
+    }
+
+    /// <summary>Al hacer clic en la burbuja de PDF, abre el archivo.</summary>
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (_pdfPath != null && File.Exists(_pdfPath))
+        {
+            System.Diagnostics.Process.Start(_pdfPath);
+            Debug.Log("[ChatBubble] Opening PDF: " + _pdfPath);
+        }
+    }
+
+    // ── Alineación ───────────────────────────────────────────────────
+
     private void AlignBubble(BubbleSide side)
     {
         RectTransform rt = GetComponent<RectTransform>();
@@ -100,7 +138,6 @@ public class ChatBubble : MonoBehaviour
                 break;
 
             case BubbleSide.System:
-                // Centrado, sin fondo o con fondo sutil
                 rt.anchorMin = new Vector2(0.5f, 0.5f);
                 rt.anchorMax = new Vector2(0.5f, 0.5f);
                 rt.pivot = new Vector2(0.5f, 0.5f);
