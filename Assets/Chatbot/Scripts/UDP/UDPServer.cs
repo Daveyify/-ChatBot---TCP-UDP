@@ -58,7 +58,7 @@ public class UDPServer : MonoBehaviour, IServer
     {
         if (!isServerRunning) // Checks if there is an active connection to the server
         {
-            Debug.Log("[Server] The server isn�t running");
+            Debug.Log("[Server] The server isn't running");
             return;
         }
 

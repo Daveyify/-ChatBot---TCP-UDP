@@ -4,25 +4,27 @@ using TMPro;
 
 /// <summary>
 /// Representa una burbuja individual en el chat.
-/// Puede mostrar texto o una imagen, y se alinea a izquierda (bot) o derecha (usuario).
+/// Tres tipos: Bot (izquierda), User (derecha), System (centrado).
 /// </summary>
 public class ChatBubble : MonoBehaviour
 {
-    public enum BubbleSide { Bot, User }
+    public enum BubbleSide { Bot, User, System }
 
-    [Header("Referencias del Prefab")]
+    [Header("Prefab references")]
     [SerializeField] private TMP_Text messageText;
     [SerializeField] private RawImage messageImage;
     [SerializeField] private GameObject textContainer;
     [SerializeField] private GameObject imageContainer;
 
-    [Header("Apariencia")]
+    [Header("Style")]
     [SerializeField] private Image bubbleBackground;
     [SerializeField] private Color botColor = new Color(0.23f, 0.23f, 0.25f);
     [SerializeField] private Color userColor = new Color(0.18f, 0.47f, 0.91f);
+    [SerializeField] private Color systemColor = new Color(0.15f, 0.15f, 0.15f, 0.6f);
 
-    [Header("Tamaño de imagen")]
-    [SerializeField] private float imageWidth = 220f; // Ancho fijo para imágenes en el chat
+    [Header("Image size")]
+    [SerializeField] private float imageWidth = 220f;
+    [SerializeField] private float imagePadding = 20f;
 
     /// <summary>Configura la burbuja con un mensaje de texto.</summary>
     public void SetText(string message, BubbleSide side)
@@ -33,68 +35,78 @@ public class ChatBubble : MonoBehaviour
         AlignBubble(side);
     }
 
+    public void SetSystemMessage(string message)
+    {
+        textContainer.SetActive(true);
+        imageContainer.SetActive(false);
+
+        messageText.text = $" {message} ";
+        messageText.alignment = TextAlignmentOptions.Center;
+        messageText.fontSize = 14;
+
+        AlignBubble(BubbleSide.System);
+    }
+
     /// <summary>Configura la burbuja con una imagen recibida como bytes.</summary>
     public void SetImage(byte[] imageBytes, BubbleSide side)
     {
         textContainer.SetActive(false);
         imageContainer.SetActive(true);
 
-        // 1. Convertir bytes a Texture2D
         Texture2D texture = new Texture2D(2, 2);
         texture.LoadImage(imageBytes);
         messageImage.texture = texture;
 
-        // 2. Calcular altura manteniendo aspect ratio
+        float finalWidth = imageWidth - imagePadding;
         float aspectRatio = (float)texture.width / texture.height;
-        float imageHeight = imageWidth / aspectRatio;
+        float finalHeight = finalWidth / aspectRatio;
 
-        // 3. Asignar tamaño al RawImage
         RectTransform imgRect = messageImage.GetComponent<RectTransform>();
-        imgRect.sizeDelta = new Vector2(imageWidth, imageHeight);
+        imgRect.sizeDelta = new Vector2(finalWidth, finalHeight);
 
-        // 4. Asignar tamaño al Panel raíz sumando el padding
-        float padding = 20f;
-        RectTransform bubbleRect = GetComponent<RectTransform>();
-        bubbleRect.sizeDelta = new Vector2(imageWidth + padding, imageHeight + padding);
-
-        // 4. Usar LayoutElement para que el Vertical Layout Group
-        //    del Panel padre lea el tamaño correcto y se ajuste
         LayoutElement layoutElement = messageImage.GetComponent<LayoutElement>();
         if (layoutElement == null)
             layoutElement = messageImage.gameObject.AddComponent<LayoutElement>();
 
-        layoutElement.preferredWidth = imageWidth;
-        layoutElement.preferredHeight = imageHeight;
-        layoutElement.minWidth = imageWidth;
-        layoutElement.minHeight = imageHeight;
+        layoutElement.preferredWidth = finalWidth;
+        layoutElement.preferredHeight = finalHeight;
+        layoutElement.minWidth = finalWidth;
+        layoutElement.minHeight = finalHeight;
 
         AlignBubble(side);
     }
 
-    /// <summary>Alinea la burbuja a izquierda (bot) o derecha (usuario).</summary>
+    /// <summary>Alinea la burbuja según el tipo.</summary>
     private void AlignBubble(BubbleSide side)
     {
         RectTransform rt = GetComponent<RectTransform>();
 
-        if (side == BubbleSide.Bot)
+        switch (side)
         {
-            rt.anchorMin = new Vector2(0f, 0.5f);
-            rt.anchorMax = new Vector2(0f, 0.5f);
-            rt.pivot = new Vector2(0f, 0.5f);
-            rt.anchoredPosition = new Vector2(10f, 0f);
+            case BubbleSide.Bot:
+                rt.anchorMin = new Vector2(0f, 0.5f);
+                rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.anchoredPosition = new Vector2(10f, 0f);
+                if (bubbleBackground != null) bubbleBackground.color = botColor;
+                break;
 
-            if (bubbleBackground != null)
-                bubbleBackground.color = botColor;
-        }
-        else
-        {
-            rt.anchorMin = new Vector2(1f, 0.5f);
-            rt.anchorMax = new Vector2(1f, 0.5f);
-            rt.pivot = new Vector2(1f, 0.5f);
-            rt.anchoredPosition = new Vector2(-10f, 0f);
+            case BubbleSide.User:
+                rt.anchorMin = new Vector2(1f, 0.5f);
+                rt.anchorMax = new Vector2(1f, 0.5f);
+                rt.pivot = new Vector2(1f, 0.5f);
+                rt.anchoredPosition = new Vector2(-10f, 0f);
+                if (bubbleBackground != null) bubbleBackground.color = userColor;
+                break;
 
-            if (bubbleBackground != null)
-                bubbleBackground.color = userColor;
+            case BubbleSide.System:
+                // Centrado, sin fondo o con fondo sutil
+                rt.anchorMin = new Vector2(0.5f, 0.5f);
+                rt.anchorMax = new Vector2(0.5f, 0.5f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.anchoredPosition = Vector2.zero;
+                if (bubbleBackground != null) bubbleBackground.color = systemColor;
+                break;
         }
     }
 }

@@ -5,14 +5,12 @@ using System.IO;
 using System.Threading;
 
 /// <summary>
-/// Maneja la UI del lado del servidor:
-/// - Muestra los mensajes que llegan del cliente (izquierda)
-/// - Muestra los mensajes que envía el servidor (derecha)
-/// - Se registra automáticamente en el ChatManager al cargar la escena
+/// Maneja la UI del lado del servidor y registra el TCPServer en el ChatManager.
+/// Vive en la escena del servidor (cargada aditivamente).
 /// </summary>
 public class ServerUIManager : MonoBehaviour
 {
-    [Header("Referencias UI")]
+    [Header("UI")]
     [SerializeField] private Transform chatContent;
     [SerializeField] private ScrollRect scrollRect;
     [SerializeField] private TMP_InputField messageInput;
@@ -23,11 +21,14 @@ public class ServerUIManager : MonoBehaviour
     [Header("Prefab")]
     [SerializeField] private GameObject chatBubblePrefab;
 
-    // Eventos que el ChatManager escucha para enviar por red
+    [Header("TCP Red")]
+    [SerializeField] private TCPServer tcpServer; // El TCPServer de esta escena
+
+    // Eventos que el ChatManager escucha
     public event System.Action<string> OnServerSendText;
     public event System.Action<byte[]> OnServerSendImage;
 
-    // Buffer para imágenes desde el thread de Windows
+    // Buffer para imágenes del file picker
     private byte[] _pendingImageBytes = null;
     private readonly object _imageLock = new object();
 
@@ -36,23 +37,21 @@ public class ServerUIManager : MonoBehaviour
         sendTextButton.onClick.AddListener(HandleSendText);
         sendImageButton.onClick.AddListener(HandleSendImage);
 
-        // Registrarse automáticamente en el ChatManager
-        // El ChatManager vive en DontDestroyOnLoad así que siempre existe
+        // Registrarse en el ChatManager (vive en DontDestroyOnLoad)
         ChatManager chatManager = FindObjectOfType<ChatManager>();
         if (chatManager != null)
         {
-            chatManager.RegisterServerUI(this);
-            Debug.Log("[ServerUI] Registrado en ChatManager.");
+            chatManager.RegisterServerUI(this, tcpServer);
+            Debug.Log("[ServerUI] Registered in ChatManager.");
         }
         else
         {
-            Debug.LogWarning("[ServerUI] No se encontró el ChatManager en la escena.");
+            Debug.LogWarning("[ServerUI] ChatManager not found.");
         }
     }
 
     void Update()
     {
-        // Procesar imágenes pendientes del file picker en el hilo principal
         lock (_imageLock)
         {
             if (_pendingImageBytes != null)
@@ -66,41 +65,46 @@ public class ServerUIManager : MonoBehaviour
         }
     }
 
-    // ── Métodos públicos para agregar burbujas ────────────────────────
+    // ── Burbujas ─────────────────────────────────────────────────────
 
-    /// <summary>Mensaje recibido del cliente → burbuja izquierda.</summary>
+    /// <summary>Mensaje del cliente → izquierda.</summary>
     public void AddClientTextBubble(string message)
     {
-        SpawnBubble().SetText(message, ChatBubble.BubbleSide.Bot); // izquierda
+        SpawnBubble().SetText(message, ChatBubble.BubbleSide.Bot);
         ScrollToBottom();
     }
 
-    /// <summary>Imagen recibida del cliente → burbuja izquierda.</summary>
+    /// <summary>Imagen del cliente → izquierda.</summary>
     public void AddClientImageBubble(byte[] imageBytes)
     {
-        SpawnBubble().SetImage(imageBytes, ChatBubble.BubbleSide.Bot); // izquierda
+        SpawnBubble().SetImage(imageBytes, ChatBubble.BubbleSide.Bot);
         ScrollToBottom();
     }
 
-    /// <summary>Mensaje enviado por el servidor → burbuja derecha.</summary>
+    /// <summary>Mensaje del servidor/agente → derecha.</summary>
     public void AddServerTextBubble(string message)
     {
-        SpawnBubble().SetText(message, ChatBubble.BubbleSide.User); // derecha
+        SpawnBubble().SetText(message, ChatBubble.BubbleSide.User);
         ScrollToBottom();
     }
 
-    /// <summary>Imagen enviada por el servidor → burbuja derecha.</summary>
+    /// <summary>Imagen del servidor/agente → derecha.</summary>
     public void AddServerImageBubble(byte[] imageBytes)
     {
-        SpawnBubble().SetImage(imageBytes, ChatBubble.BubbleSide.User); // derecha
+        SpawnBubble().SetImage(imageBytes, ChatBubble.BubbleSide.User);
         ScrollToBottom();
     }
 
-    /// <summary>Actualiza el texto de estado.</summary>
     public void SetStatus(string message)
     {
         if (statusText != null)
             statusText.text = message;
+    }
+
+    public void AddSystemBubble(string message)
+    {
+        SpawnBubble().SetSystemMessage(message);
+        ScrollToBottom();
     }
 
     // ── Handlers internos ────────────────────────────────────────────
@@ -108,12 +112,7 @@ public class ServerUIManager : MonoBehaviour
     private void HandleSendText()
     {
         string text = messageInput.text.Trim();
-
-        if (string.IsNullOrEmpty(text))
-        {
-            Debug.Log("[ServerUI] El campo de texto está vacío.");
-            return;
-        }
+        if (string.IsNullOrEmpty(text)) return;
 
         AddServerTextBubble(text);
         messageInput.text = "";
@@ -125,10 +124,9 @@ public class ServerUIManager : MonoBehaviour
         Thread fileThread = new Thread(() =>
         {
             System.Windows.Forms.Application.EnableVisualStyles();
-
             using (var dialog = new System.Windows.Forms.OpenFileDialog())
             {
-                dialog.Title  = "Selecciona una imagen";
+                dialog.Title = "Selecciona una imagen";
                 dialog.Filter = "Imágenes|*.png;*.jpg;*.jpeg;*.bmp;*.gif";
 
                 if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
@@ -136,10 +134,9 @@ public class ServerUIManager : MonoBehaviour
                     string path = dialog.FileName;
                     if (File.Exists(path))
                     {
-                        byte[] imageBytes = File.ReadAllBytes(path);
                         lock (_imageLock)
                         {
-                            _pendingImageBytes = imageBytes;
+                            _pendingImageBytes = File.ReadAllBytes(path);
                         }
                     }
                 }

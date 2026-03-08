@@ -216,7 +216,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &210814577
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -469,7 +469,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: -0.0009678428, y: 0.0001461519}
-  m_SizeDelta: {x: -8.799032, y: 0}
+  m_SizeDelta: {x: -8.799032, y: 47}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &469517844
 MonoBehaviour:
@@ -1266,7 +1266,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1132708662
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1667,10 +1667,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChatManager
   udpServer: {fileID: 1144782922}
   udpClient: {fileID: 1144782921}
+  tcpClient: {fileID: 1282264348}
   serverAddress: 127.0.0.1
-  serverPort: 5555
+  udpPort: 5555
   delayBetweenMessagesMs: 1000
   delayBetweenChunksMs: 10
+  tcpPort: 5556
   botMessage1: "\xA1Hola! Bienvenido al chat. \xBFEn qu\xE9 puedo ayudarte?"
   botMessage2: Gracias por tu respuesta. Ahora te voy a conectar con un agente.
   chatUI: {fileID: 621015947}

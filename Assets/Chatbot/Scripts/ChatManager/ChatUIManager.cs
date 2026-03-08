@@ -91,6 +91,12 @@ public class ChatUIManager : MonoBehaviour
         if (statusText != null)
             statusText.text = message;
     }
+    public void AddSystemBubble(string message)
+    {
+        Debug.Log("[ChatUI] AddSystemBubble called: " + message);
+        SpawnBubble().SetSystemMessage(message);
+        ScrollToBottom();
+    }
 
     // ── Handlers internos ────────────────────────────────────────────
 
@@ -100,7 +106,7 @@ public class ChatUIManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(text))
         {
-            Debug.Log("[ChatUI] El campo de texto está vacío.");
+            Debug.Log("[ChatUI] The field text is empty.");
             return;
         }
 

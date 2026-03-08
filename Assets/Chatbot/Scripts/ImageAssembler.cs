@@ -65,7 +65,7 @@ public class ImageAssembler
         int    totalChunks = int.Parse(parts[1]);
 
         _transfers[id] = new TransferData { TotalChunks = totalChunks };
-        Debug.Log($"[ImageAssembler] Iniciando transferencia '{id}' — {totalChunks} chunks esperados.");
+        Debug.Log($"[ImageAssembler] Started transference '{id}' — {totalChunks} chunks expected.");
     }
 
     private void HandleChunk(string message)
@@ -85,12 +85,12 @@ public class ImageAssembler
 
         if (!_transfers.ContainsKey(id))
         {
-            Debug.LogWarning($"[ImageAssembler] Chunk recibido para transferencia desconocida '{id}'.");
+            Debug.LogWarning($"[ImageAssembler] Chunk received for unknown transfer '{id}'.");
             return;
         }
 
         _transfers[id].Chunks[chunkIndex] = base64;
-        Debug.Log($"[ImageAssembler] Chunk {chunkIndex + 1}/{_transfers[id].TotalChunks} recibido.");
+        Debug.Log($"[ImageAssembler] Chunk {chunkIndex + 1}/{_transfers[id].TotalChunks} received.");
     }
 
     private void HandleEnd(string message)
@@ -100,7 +100,7 @@ public class ImageAssembler
 
         if (!_transfers.ContainsKey(id))
         {
-            Debug.LogWarning($"[ImageAssembler] IMG_END para transferencia desconocida '{id}'.");
+            Debug.LogWarning($"[ImageAssembler] IMG_END for unknow transfer '{id}'.");
             return;
         }
 
@@ -109,7 +109,7 @@ public class ImageAssembler
         // Verificar que llegaron todos los chunks
         if (transfer.Chunks.Count != transfer.TotalChunks)
         {
-            Debug.LogWarning($"[ImageAssembler] Transferencia '{id}' incompleta: " +
+            Debug.LogWarning($"[ImageAssembler] Transfer '{id}' incomplete: " +
                              $"{transfer.Chunks.Count}/{transfer.TotalChunks} chunks.");
             _transfers.Remove(id);
             return;
@@ -124,7 +124,7 @@ public class ImageAssembler
         }
 
         _transfers.Remove(id);
-        Debug.Log($"[ImageAssembler] Imagen '{id}' reconstruida — {allBytes.Count} bytes.");
+        Debug.Log($"[ImageAssembler] Imagen '{id}' rebuilt — {allBytes.Count} bytes.");
 
         OnImageAssembled?.Invoke(allBytes.ToArray());
     }

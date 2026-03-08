@@ -50,7 +50,7 @@ public class UDPClient : MonoBehaviour, IClient
         catch (ObjectDisposedException)
         {
             // El cliente fue cerrado intencionalmente, no es un error
-            Debug.Log("[Client] ReceiveLoop detenido (cliente cerrado).");
+            Debug.Log("[Client] ReceiveLoop stopped (client closed).");
         }
         catch (SocketException ex)
         {
@@ -66,7 +66,7 @@ public class UDPClient : MonoBehaviour, IClient
             // Cualquier otro error inesperado
             if (isConnected)
             {
-                Debug.LogWarning("[Client] Error inesperado en ReceiveLoop: " + ex.Message);
+                Debug.LogWarning("[Client] Unexpected error in ReceiveLoop: " + ex.Message);
                 Disconnect();
             }
         }
