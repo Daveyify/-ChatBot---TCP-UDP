@@ -70,7 +70,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 8571661363573756414, guid: 6ed400d4e85b17b4bbc5e588d818e01f, type: 3}
+  m_Sprite: {fileID: 0}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -107,8 +107,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.VerticalLayoutGroup
   m_Padding:
-    m_Left: 24
-    m_Right: 0
+    m_Left: 10
+    m_Right: 10
     m_Top: 22
     m_Bottom: 20
   m_ChildAlignment: 0
@@ -140,6 +140,7 @@ MonoBehaviour:
   botColor: {r: 0.9490196, g: 0.59607846, b: 0.21176471, a: 1}
   userColor: {r: 0.09411765, g: 0.11764706, b: 0.48235294, a: 1}
   systemColor: {r: 0.15, g: 0.15, b: 0.15, a: 0.6}
+  cornerRadius: 20
   imageWidth: 150
   imagePadding: 20
 --- !u!1 &5553573210728039256
@@ -264,7 +265,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 24, y: -22}
+  m_AnchoredPosition: {x: 10, y: -22}
   m_SizeDelta: {x: 155.80098, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &815389901198090574
@@ -297,8 +298,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: New Text
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 1d7ff4e609fda1442a808c871bc7815c, type: 2}
-  m_sharedMaterial: {fileID: 8695184989047291745, guid: 1d7ff4e609fda1442a808c871bc7815c, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 40cb6044dc1c24d4a842f5d23ae0e262, type: 2}
+  m_sharedMaterial: {fileID: 8064164243274573333, guid: 40cb6044dc1c24d4a842f5d23ae0e262, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -322,8 +323,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14.65
-  m_fontSizeBase: 14.65
+  m_fontSize: 10
+  m_fontSizeBase: 10
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18

@@ -5,10 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
-/// <summary>
-/// TCP Server extended with file transfer using length-prefix framing.
-/// [4 bytes length][payload] – matches TCPClient framing.
-/// </summary>
 public class TCPServer : MonoBehaviour, IServer
 {
     private TcpListener tcpListener;
@@ -18,11 +14,10 @@ public class TCPServer : MonoBehaviour, IServer
     public bool isServerRunning { get; private set; }
 
     public event Action<string> OnMessageReceived;
-    public event Action<FileTransferData> OnFileReceived; // fired when client sends a file
+    public event Action<FileTransferData> OnFileReceived; 
     public event Action OnConnected;
     public event Action OnDisconnected;
 
-    // ── Start ──────────────────────────────────────────────────────────────────
 
     public async Task StartServer(int port)
     {
@@ -40,7 +35,6 @@ public class TCPServer : MonoBehaviour, IServer
         _ = ReceiveLoop();
     }
 
-    // ── Receive (length-prefixed frames) ──────────────────────────────────────
 
     private async Task ReceiveLoop()
     {
@@ -48,7 +42,6 @@ public class TCPServer : MonoBehaviour, IServer
         {
             while (connectedClient != null && connectedClient.Connected)
             {
-                // Read 4-byte length header
                 byte[] header = new byte[4];
                 int headerRead = await ReadExactAsync(header, 4);
                 if (headerRead == 0)
@@ -60,7 +53,6 @@ public class TCPServer : MonoBehaviour, IServer
                 int payloadLength = BitConverter.ToInt32(header, 0);
                 if (payloadLength <= 0) continue;
 
-                // Read full payload
                 byte[] payload = new byte[payloadLength];
                 int payloadRead = await ReadExactAsync(payload, payloadLength);
                 if (payloadRead == 0) break;
@@ -97,8 +89,6 @@ public class TCPServer : MonoBehaviour, IServer
         return totalRead;
     }
 
-    // ── Send text ──────────────────────────────────────────────────────────────
-
     public async Task SendMessageAsync(string message)
     {
         if (networkStream == null || !connectedClient.Connected)
@@ -110,8 +100,6 @@ public class TCPServer : MonoBehaviour, IServer
         await SendFrameAsync(Encoding.UTF8.GetBytes(message));
         Debug.Log("[TCPServer] Sent: " + message);
     }
-
-    // ── Send file (agent → client) ─────────────────────────────────────────────
 
     public async Task SendFileDataAsync(string fileName, string fileType, byte[] bytes)
     {
@@ -127,16 +115,12 @@ public class TCPServer : MonoBehaviour, IServer
         Debug.Log($"[TCPServer] File sent to client: {fileName} ({bytes.Length} bytes)");
     }
 
-    // ── Framing helper ─────────────────────────────────────────────────────────
-
     private async Task SendFrameAsync(byte[] data)
     {
         byte[] header = BitConverter.GetBytes(data.Length);
         await networkStream.WriteAsync(header, 0, header.Length);
         await networkStream.WriteAsync(data, 0, data.Length);
     }
-
-    // ── Disconnect ─────────────────────────────────────────────────────────────
 
     public void Disconnect()
     {

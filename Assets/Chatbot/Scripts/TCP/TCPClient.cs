@@ -6,12 +6,6 @@ using System.Threading.Tasks;
 using UnityEditor.PackageManager;
 using UnityEngine;
 
-/// <summary>
-/// TCP Client extended with file transfer.
-/// TCP is stream-based so we use a simple length-prefix framing:
-///   [4 bytes big-endian length][payload bytes]
-/// This allows reliable delivery of large files.
-/// </summary>
 public class TCPClient : MonoBehaviour, IClient
 {
     private TcpClient tcpClient;
@@ -23,8 +17,6 @@ public class TCPClient : MonoBehaviour, IClient
     public event Action<FileTransferData> OnFileReceived;
     public event Action OnConnected;
     public event Action OnDisconnected;
-
-    // ── Connect ────────────────────────────────────────────────────────────────
 
     public async Task ConnectToServer(string ip, int port)
     {
@@ -39,15 +31,12 @@ public class TCPClient : MonoBehaviour, IClient
         _ = ReceiveLoop();
     }
 
-    // ── Receive (length-prefixed frames) ──────────────────────────────────────
-
     private async Task ReceiveLoop()
     {
         try
         {
             while (tcpClient != null && tcpClient.Connected)
             {
-                // Read 4-byte length header
                 byte[] header = new byte[4];
                 int headerRead = await ReadExactAsync(header, 4);
                 if (headerRead == 0) break; // server disconnected
@@ -55,14 +44,12 @@ public class TCPClient : MonoBehaviour, IClient
                 int payloadLength = BitConverter.ToInt32(header, 0);
                 if (payloadLength <= 0) continue;
 
-                // Read full payload
                 byte[] payload = new byte[payloadLength];
                 int payloadRead = await ReadExactAsync(payload, payloadLength);
                 if (payloadRead == 0) break;
 
                 string raw = Encoding.UTF8.GetString(payload, 0, payloadRead);
 
-                // File or text?
                 if (FileTransferData.TryParse(raw, out FileTransferData file))
                 {
                     Debug.Log($"[TCPClient] File received: {file.fileName}");
@@ -81,7 +68,6 @@ public class TCPClient : MonoBehaviour, IClient
         }
     }
 
-    /// <summary>Read exactly 'count' bytes from the stream (handles partial reads).</summary>
     private async Task<int> ReadExactAsync(byte[] buffer, int count)
     {
         int totalRead = 0;
@@ -93,8 +79,6 @@ public class TCPClient : MonoBehaviour, IClient
         }
         return totalRead;
     }
-
-    // ── Send text ──────────────────────────────────────────────────────────────
 
     public async Task SendMessageAsync(string message)
     {
@@ -108,9 +92,6 @@ public class TCPClient : MonoBehaviour, IClient
         Debug.Log("[TCPClient] Sent: " + message);
     }
 
-    // ── Send file ──────────────────────────────────────────────────────────────
-
-    /// <summary>Send an image (PNG/JPG) or PDF from a file path.</summary>
     public async Task SendFileAsync(string filePath)
     {
         if (!isConnected || networkStream == null)
@@ -133,7 +114,6 @@ public class TCPClient : MonoBehaviour, IClient
         await SendFileDataAsync(fileName, fileType, bytes);
     }
 
-    /// <summary>Send a Texture2D (e.g. from camera or gallery).</summary>
     public async Task SendTextureAsync(Texture2D texture, string fileName = "image.png")
     {
         if (!isConnected || networkStream == null) return;
@@ -142,7 +122,6 @@ public class TCPClient : MonoBehaviour, IClient
         await SendFileDataAsync(fileName, "image", bytes);
     }
 
-    /// <summary>Send raw bytes as a named file.</summary>
     public async Task SendFileDataAsync(string fileName, string fileType, byte[] bytes)
     {
         FileTransferData transfer = FileTransferData.FromBytes(fileName, fileType, bytes);
@@ -151,17 +130,12 @@ public class TCPClient : MonoBehaviour, IClient
         Debug.Log($"[TCPClient] File sent: {fileName} ({bytes.Length} bytes)");
     }
 
-    // ── Framing helper ─────────────────────────────────────────────────────────
-
-    /// <summary>Write a length-prefixed frame to the stream.</summary>
     private async Task SendFrameAsync(byte[] data)
     {
         byte[] header = BitConverter.GetBytes(data.Length); // 4 bytes
         await networkStream.WriteAsync(header, 0, header.Length);
         await networkStream.WriteAsync(data, 0, data.Length);
     }
-
-    // ── Disconnect ─────────────────────────────────────────────────────────────
 
     public void Disconnect()
     {

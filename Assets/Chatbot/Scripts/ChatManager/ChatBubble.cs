@@ -4,11 +4,6 @@ using UnityEngine.EventSystems;
 using TMPro;
 using System.IO;
 
-/// <summary>
-/// Representa una burbuja individual en el chat.
-/// Tipos: Bot (izquierda), User (derecha), System (centrado).
-/// Soporta texto, imagen y PDF (abre al hacer clic).
-/// </summary>
 public class ChatBubble : MonoBehaviour, IPointerClickHandler
 {
     public enum BubbleSide { Bot, User, System }
@@ -24,17 +19,24 @@ public class ChatBubble : MonoBehaviour, IPointerClickHandler
     [SerializeField] private Color botColor = new Color(0.23f, 0.23f, 0.25f);
     [SerializeField] private Color userColor = new Color(0.18f, 0.47f, 0.91f);
     [SerializeField] private Color systemColor = new Color(0.15f, 0.15f, 0.15f, 0.6f);
+    [SerializeField] private int cornerRadius = 20;
 
     [Header("Size image")]
     [SerializeField] private float imageWidth = 220f;
     [SerializeField] private float imagePadding = 20f;
 
-    // Ruta del PDF guardado — se usa al hacer clic para abrirlo
     private string _pdfPath = null;
 
-    // ── Métodos públicos ─────────────────────────────────────────────
+    private void Awake()
+    {
+        if (bubbleBackground != null)
+        {
+            bubbleBackground.sprite = CreateRoundedSprite(128, 128, cornerRadius);
+            bubbleBackground.type = Image.Type.Sliced;
+            bubbleBackground.pixelsPerUnitMultiplier = 1f;
+        }
+    }
 
-    /// <summary>Configura la burbuja con un mensaje de texto.</summary>
     public void SetText(string message, BubbleSide side)
     {
         textContainer.SetActive(true);
@@ -44,7 +46,6 @@ public class ChatBubble : MonoBehaviour, IPointerClickHandler
         AlignBubble(side);
     }
 
-    /// <summary>Configura la burbuja como mensaje de sistema centrado.</summary>
     public void SetSystemMessage(string message)
     {
         textContainer.SetActive(true);
@@ -55,7 +56,6 @@ public class ChatBubble : MonoBehaviour, IPointerClickHandler
         AlignBubble(BubbleSide.System);
     }
 
-    /// <summary>Configura la burbuja con una imagen.</summary>
     public void SetImage(byte[] imageBytes, BubbleSide side)
     {
         textContainer.SetActive(false);
@@ -82,28 +82,21 @@ public class ChatBubble : MonoBehaviour, IPointerClickHandler
         AlignBubble(side);
     }
 
-    /// <summary>
-    /// Configura la burbuja como PDF.
-    /// Guarda el archivo en persistentDataPath y lo abre al hacer clic.
-    /// </summary>
     public void SetPDF(byte[] pdfBytes, string fileName, BubbleSide side)
     {
         textContainer.SetActive(true);
         imageContainer.SetActive(false);
 
-        // Guardar PDF en disco para poder abrirlo
         _pdfPath = Path.Combine(Application.persistentDataPath, fileName);
         File.WriteAllBytes(_pdfPath, pdfBytes);
 
-        // Mostrar texto clickeable con ícono
-        messageText.text = $"📄 {fileName}\n<size=12><color=#aaaaaa>Toca para abrir</color></size>";
+        messageText.text = $"📄 {fileName}\n<size=12><color=#aaaaaa>Tap to open</color></size>";
         messageText.alignment = TextAlignmentOptions.Left;
 
         AlignBubble(side);
         Debug.Log($"[ChatBubble] PDF saved in: {_pdfPath}");
     }
 
-    /// <summary>Al hacer clic en la burbuja de PDF, abre el archivo.</summary>
     public void OnPointerClick(PointerEventData eventData)
     {
         if (_pdfPath != null && File.Exists(_pdfPath))
@@ -112,9 +105,6 @@ public class ChatBubble : MonoBehaviour, IPointerClickHandler
             Debug.Log("[ChatBubble] Opening PDF: " + _pdfPath);
         }
     }
-
-    // ── Alineación ───────────────────────────────────────────────────
-
     private void AlignBubble(BubbleSide side)
     {
         RectTransform rt = GetComponent<RectTransform>();
@@ -145,5 +135,40 @@ public class ChatBubble : MonoBehaviour, IPointerClickHandler
                 if (bubbleBackground != null) bubbleBackground.color = systemColor;
                 break;
         }
+    }
+
+    private Sprite CreateRoundedSprite(int width, int height, int radius)
+    {
+        Texture2D tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+
+        Color[] pixels = new Color[width * height];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+                pixels[y * width + x] = IsInsideRounded(x, y, width, height, radius)
+                    ? Color.white
+                    : Color.clear;
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+
+        return Sprite.Create(
+            tex,
+            new Rect(0, 0, width, height),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            new Vector4(radius, radius, radius, radius)
+        );
+    }
+
+    private bool IsInsideRounded(int x, int y, int w, int h, int r)
+    {
+        if (x < r && y < r) return Vector2.Distance(new Vector2(x, y), new Vector2(r, r)) <= r;
+        if (x > w - r - 1 && y < r) return Vector2.Distance(new Vector2(x, y), new Vector2(w - r - 1, r)) <= r;
+        if (x < r && y > h - r - 1) return Vector2.Distance(new Vector2(x, y), new Vector2(r, h - r - 1)) <= r;
+        if (x > w - r - 1 && y > h - r - 1) return Vector2.Distance(new Vector2(x, y), new Vector2(w - r - 1, h - r - 1)) <= r;
+        return true;
     }
 }

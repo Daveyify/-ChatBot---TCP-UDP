@@ -4,9 +4,6 @@ using TMPro;
 using System.IO;
 using System.Threading;
 
-/// <summary>
-/// Maneja la UI del servidor y registra el TCPServer en el ChatManager.
-/// </summary>
 public class ServerUIManager : MonoBehaviour
 {
     [Header("UI")]
@@ -23,12 +20,11 @@ public class ServerUIManager : MonoBehaviour
     [Header("Red TCP")]
     [SerializeField] private TCPServer tcpServer;
 
-    // Eventos que el ChatManager escucha
     public event System.Action<string> OnServerSendText;
     public event System.Action<byte[]> OnServerSendImage;
     public event System.Action<byte[], string> OnServerSendPDF;
 
-    // Buffer para archivos del file picker
+    // Buffer file picker
     private byte[] _pendingImageBytes = null;
     private byte[] _pendingPDFBytes = null;
     private string _pendingPDFName = null;
@@ -70,8 +66,6 @@ public class ServerUIManager : MonoBehaviour
         }
     }
 
-    // ── Burbujas públicas ─────────────────────────────────────────────
-
     public void AddClientTextBubble(string message) => SpawnAndScroll(b => b.SetText(message, ChatBubble.BubbleSide.Bot));
     public void AddClientImageBubble(byte[] bytes) => SpawnAndScroll(b => b.SetImage(bytes, ChatBubble.BubbleSide.Bot));
     public void AddClientPDFBubble(byte[] b, string n) => SpawnAndScroll(bub => bub.SetPDF(b, n, ChatBubble.BubbleSide.Bot));
@@ -84,8 +78,6 @@ public class ServerUIManager : MonoBehaviour
     {
         if (statusText != null) statusText.text = message;
     }
-
-    // ── Handlers internos ────────────────────────────────────────────
 
     private void HandleSendText()
     {
@@ -133,8 +125,6 @@ public class ServerUIManager : MonoBehaviour
         fileThread.SetApartmentState(ApartmentState.STA);
         fileThread.Start();
     }
-
-    // ── Helpers ──────────────────────────────────────────────────────
 
     private void SpawnAndScroll(System.Action<ChatBubble> configure)
     {

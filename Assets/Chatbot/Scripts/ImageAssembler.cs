@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Recolecta chunks de imagen y PDF que llegan por UDP y los reconstruye.
-/// </summary>
 public class ImageAssembler
 {
     public event Action<byte[]> OnImageAssembled;
@@ -20,7 +17,6 @@ public class ImageAssembler
         public Dictionary<int, string> Chunks = new Dictionary<int, string>();
     }
 
-    /// <summary>Procesa un mensaje UDP. Devuelve true si era un chunk.</summary>
     public bool ProcessMessage(string message)
     {
         if (message.StartsWith(ImageChunker.PREFIX_START)) { HandleStart(message, false); return true; }
